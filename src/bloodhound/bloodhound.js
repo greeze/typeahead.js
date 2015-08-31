@@ -4,174 +4,171 @@
  * Copyright 2013-2014 Twitter, Inc. and other contributors; Licensed MIT
  */
 
-(function(root) {
-  'use strict';
+;(function (root) {
+  'use strict'
 
-  var old, keys;
+  var old, keys
 
-  old = root.Bloodhound;
-  keys = { data: 'data', protocol: 'protocol', thumbprint: 'thumbprint' };
+  old = root.Bloodhound
+  keys = { data: 'data', protocol: 'protocol', thumbprint: 'thumbprint' }
 
   // add Bloodhoud to global context
-  root.Bloodhound = Bloodhound;
+  root.Bloodhound = Bloodhound
 
   // constructor
   // -----------
 
-  function Bloodhound(o) {
+  function Bloodhound (o) {
     if (!o || (!o.local && !o.prefetch && !o.remote)) {
-      $.error('one of local, prefetch, or remote is required');
+      $.error('one of local, prefetch, or remote is required')
     }
 
-    this.limit = o.limit || 5;
-    this.sorter = getSorter(o.sorter);
-    this.dupDetector = o.dupDetector || ignoreDuplicates;
+    this.limit = o.limit || 5
+    this.sorter = getSorter(o.sorter)
+    this.dupDetector = o.dupDetector || ignoreDuplicates
 
-    this.local = oParser.local(o);
-    this.prefetch = oParser.prefetch(o);
-    this.remote = oParser.remote(o);
+    this.local = oParser.local(o)
+    this.prefetch = oParser.prefetch(o)
+    this.remote = oParser.remote(o)
 
     this.cacheKey = this.prefetch ?
-      (this.prefetch.cacheKey || this.prefetch.url) : null;
+      (this.prefetch.cacheKey || this.prefetch.url) : null
 
     // the backing data structure used for fast pattern matching
     this.index = new SearchIndex({
       datumTokenizer: o.datumTokenizer,
       queryTokenizer: o.queryTokenizer
-    });
+    })
 
     // only initialize storage if there's a cacheKey otherwise
     // loading from storage on subsequent page loads is impossible
-    this.storage = this.cacheKey ? new PersistentStorage(this.cacheKey) : null;
+    this.storage = this.cacheKey ? new PersistentStorage(this.cacheKey) : null
   }
 
   // static methods
   // --------------
 
-  Bloodhound.noConflict = function noConflict() {
-    root.Bloodhound = old;
-    return Bloodhound;
-  };
+  Bloodhound.noConflict = function noConflict () {
+    root.Bloodhound = old
+    return Bloodhound
+  }
 
-  Bloodhound.tokenizers = tokenizers;
+  Bloodhound.tokenizers = tokenizers
 
   // instance methods
   // ----------------
 
   _.mixin(Bloodhound.prototype, {
-
     // ### private
 
-    _loadPrefetch: function loadPrefetch(o) {
-      var that = this, serialized, deferred;
+    _loadPrefetch: function loadPrefetch (o) {
+      var that = this, serialized, deferred
 
       if (serialized = this._readFromStorage(o.thumbprint)) {
-        this.index.bootstrap(serialized);
-        deferred = $.Deferred().resolve();
+        this.index.bootstrap(serialized)
+        deferred = $.Deferred().resolve()
+      } else {
+        deferred = $.ajax(o.url, o.ajax).done(handlePrefetchResponse)
       }
 
-      else {
-        deferred = $.ajax(o.url, o.ajax).done(handlePrefetchResponse);
-      }
+      return deferred
 
-      return deferred;
-
-      function handlePrefetchResponse(resp) {
+      function handlePrefetchResponse (resp) {
         // clear to mirror the behavior of bootstrapping
-        that.clear();
-        that.add(o.filter ? o.filter(resp) : resp);
+        that.clear()
+        that.add(o.filter ? o.filter(resp) : resp)
 
-        that._saveToStorage(that.index.serialize(), o.thumbprint, o.ttl);
+        that._saveToStorage(that.index.serialize(), o.thumbprint, o.ttl)
       }
     },
 
-    _getFromRemote: function getFromRemote(query, cb) {
-      var that = this, url, uriEncodedQuery;
+    _getFromRemote: function getFromRemote (query, cb) {
+      var that = this, url, uriEncodedQuery
 
       if (!this.transport) { return; }
 
-      query = query || '';
-      uriEncodedQuery = encodeURIComponent(query);
+      query = query || ''
+      uriEncodedQuery = encodeURIComponent(query)
 
       url = this.remote.replace ?
         this.remote.replace(this.remote.url, query) :
-        this.remote.url.replace(this.remote.wildcard, uriEncodedQuery);
+        this.remote.url.replace(this.remote.wildcard, uriEncodedQuery)
 
-      return this.transport.get(url, this.remote.ajax, handleRemoteResponse);
+      return this.transport.get(url, this.remote.ajax, handleRemoteResponse)
 
-      function handleRemoteResponse(err, resp) {
-        err ? cb([]) : cb(that.remote.filter ? that.remote.filter(resp) : resp);
+      function handleRemoteResponse (err, resp) {
+        err ? cb([]) : cb(that.remote.filter ? that.remote.filter(resp) : resp)
       }
     },
 
-    _cancelLastRemoteRequest: function cancelLastRemoteRequest() {
+    _cancelLastRemoteRequest: function cancelLastRemoteRequest () {
       // #149: prevents outdated rate-limited requests from being sent
-      this.transport && this.transport.cancel();
+      this.transport && this.transport.cancel()
     },
 
-    _saveToStorage: function saveToStorage(data, thumbprint, ttl) {
+    _saveToStorage: function saveToStorage (data, thumbprint, ttl) {
       if (this.storage) {
-        this.storage.set(keys.data, data, ttl);
-        this.storage.set(keys.protocol, location.protocol, ttl);
-        this.storage.set(keys.thumbprint, thumbprint, ttl);
+        this.storage.set(keys.data, data, ttl)
+        this.storage.set(keys.protocol, location.protocol, ttl)
+        this.storage.set(keys.thumbprint, thumbprint, ttl)
       }
     },
 
-    _readFromStorage: function readFromStorage(thumbprint) {
-      var stored = {}, isExpired;
+    _readFromStorage: function readFromStorage (thumbprint) {
+      var stored = {}, isExpired
 
       if (this.storage) {
-        stored.data = this.storage.get(keys.data);
-        stored.protocol = this.storage.get(keys.protocol);
-        stored.thumbprint = this.storage.get(keys.thumbprint);
+        stored.data = this.storage.get(keys.data)
+        stored.protocol = this.storage.get(keys.protocol)
+        stored.thumbprint = this.storage.get(keys.thumbprint)
       }
       // the stored data is considered expired if the thumbprints
       // don't match or if the protocol it was originally stored under
       // has changed
       isExpired = stored.thumbprint !== thumbprint ||
-        stored.protocol !== location.protocol;
+        stored.protocol !== location.protocol
 
-      return stored.data && !isExpired ? stored.data : null;
+      return stored.data && !isExpired ? stored.data : null
     },
 
-    _initialize: function initialize() {
-      var that = this, local = this.local, deferred;
+    _initialize: function initialize () {
+      var that = this, local = this.local, deferred
 
       deferred = this.prefetch ?
-        this._loadPrefetch(this.prefetch) : $.Deferred().resolve();
+        this._loadPrefetch(this.prefetch) : $.Deferred().resolve()
 
       // make sure local is added to the index after prefetch
-      local && deferred.done(addLocalToIndex);
+      local && deferred.done(addLocalToIndex)
 
-      this.transport = this.remote ? new Transport(this.remote) : null;
+      this.transport = this.remote ? new Transport(this.remote) : null
 
-      return (this.initPromise = deferred.promise());
+      return (this.initPromise = deferred.promise())
 
-      function addLocalToIndex() {
+      function addLocalToIndex () {
         // local can be a function that returns an array of datums
-        that.add(_.isFunction(local) ? local() : local);
+        that.add(_.isFunction(local) ? local() : local)
       }
     },
 
     // ### public
 
-    initialize: function initialize(force) {
-      return !this.initPromise || force ? this._initialize() : this.initPromise;
+    initialize: function initialize (force) {
+      return !this.initPromise || force ? this._initialize() : this.initPromise
     },
 
-    add: function add(data) {
-      this.index.add(data);
+    add: function add (data) {
+      this.index.add(data)
     },
 
-    get: function get(query, cb) {
-      var that = this, matches = [], cacheHit = false;
+    get: function get (query, cb) {
+      var that = this, matches = [], cacheHit = false
 
-      matches = (query === '' ? this.index.all() : this.index.get(query));
-      matches = this.sorter(matches).slice(0, this.limit);
+      matches = (query === '' ? this.index.all() : this.index.get(query))
+      matches = this.sorter(matches).slice(0, this.limit)
 
       matches.length < this.limit ?
         (cacheHit = this._getFromRemote(query, returnRemoteMatches)) :
-        this._cancelLastRemoteRequest();
+        this._cancelLastRemoteRequest()
 
       // if a cache hit occurred, skip rendering local matches
       // because the rendering of local/remote matches is already
@@ -179,56 +176,56 @@
       if (!cacheHit) {
         // only render if there are some local suggestions or we're
         // going to the network to backfill
-        (matches.length > 0 || !this.transport) && cb && cb(matches);
+        (matches.length > 0 || !this.transport) && cb && cb(matches)
       }
 
-      function returnRemoteMatches(remoteMatches) {
-        var matchesWithBackfill = matches.slice(0);
+      function returnRemoteMatches (remoteMatches) {
+        var matchesWithBackfill = matches.slice(0)
 
-        _.each(remoteMatches, function(remoteMatch) {
-          var isDuplicate;
+        _.each(remoteMatches, function (remoteMatch) {
+          var isDuplicate
 
           // checks for duplicates
-          isDuplicate = _.some(matchesWithBackfill, function(match) {
-            return that.dupDetector(remoteMatch, match);
-          });
+          isDuplicate = _.some(matchesWithBackfill, function (match) {
+            return that.dupDetector(remoteMatch, match)
+          })
 
-          !isDuplicate && matchesWithBackfill.push(remoteMatch);
+          !isDuplicate && matchesWithBackfill.push(remoteMatch)
 
           // if we're at the limit, we no longer need to process
           // the remote results and can break out of the each loop
-          return matchesWithBackfill.length < that.limit;
-        });
-        cb && cb(that.sorter(matchesWithBackfill));
+          return matchesWithBackfill.length < that.limit
+        })
+        cb && cb(that.sorter(matchesWithBackfill))
       }
     },
 
-    clear: function clear() {
-      this.index.reset();
+    clear: function clear () {
+      this.index.reset()
     },
 
-    clearPrefetchCache: function clearPrefetchCache() {
-      this.storage && this.storage.clear();
+    clearPrefetchCache: function clearPrefetchCache () {
+      this.storage && this.storage.clear()
     },
 
-    clearRemoteCache: function clearRemoteCache() {
-      this.transport && Transport.resetCache();
+    clearRemoteCache: function clearRemoteCache () {
+      this.transport && Transport.resetCache()
     },
 
-    ttAdapter: function ttAdapter() { return _.bind(this.get, this); }
-  });
+    ttAdapter: function ttAdapter () { return _.bind(this.get, this); }
+  })
 
-  return Bloodhound;
+  return Bloodhound
 
   // helper functions
   // ----------------
 
-  function getSorter(sortFn) {
-    return _.isFunction(sortFn) ? sort : noSort;
+  function getSorter (sortFn) {
+    return _.isFunction(sortFn) ? sort : noSort
 
-    function sort(array) { return array.sort(sortFn); }
-    function noSort(array) { return array; }
+    function sort (array) { return array.sort(sortFn); }
+    function noSort (array) { return array; }
   }
 
-  function ignoreDuplicates() { return false; }
-})(this);
+  function ignoreDuplicates () { return false; }
+})(this || window)
